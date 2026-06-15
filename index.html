@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>3PM Company – Order Status Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg:        #0d0d1a;
+    --surface:   #12122a;
+    --surface2:  #1a1a3a;
+    --border:    #2a2a50;
+    --text:      #e8e8ff;
+    --muted:     #8888aa;
+    --accent:    #4488ff;
+    --waved:     #4488ff;
+    --picked:    #d4a017;
+    --packed:    #22aa55;
+    --staged:    #9966cc;
+    --shipped:   #00ccdd;
+    --inpool:    #888888;
+    --urgent:    #ff4444;
+    --radius:    6px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .topbar-left { display: flex; align-items: center; gap: 14px; }
+  .brand { font-size: 20px; font-weight: 800; letter-spacing: 1px; color: var(--text); }
+  .brand-sep { color: var(--border); font-size: 22px; }
+  .dashboard-label { color: var(--accent); font-size: 14px; font-weight: 600; letter-spacing: 2px; }
+  .refresh-info { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .refresh-icon { font-size: 16px; cursor: pointer; transition: transform .3s; }
+  .refresh-icon:hover { transform: rotate(180deg); }
+
+  /* ── FILTERS ── */
+  .filters-bar {
+    display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;
+    padding: 16px 24px; background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 6px; }
+  .filter-group label { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); }
+  .filter-group select {
+    background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 8px 32px 8px 12px; font-size: 13px;
+    min-width: 160px; appearance: none; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238888aa' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
+  }
+  .filter-group select:focus { outline: none; border-color: var(--accent); }
+
+  /* Calendar filter */
+  .cal-wrapper { display: flex; flex-direction: column; gap: 6px; }
+  .cal-wrapper label { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); }
+  .cal-widget {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px; font-size: 12px; min-width: 220px;
+  }
+  .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .cal-nav { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 2px 6px; }
+  .cal-nav:hover { color: var(--text); }
+  .cal-month { font-weight: 700; font-size: 13px; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; text-align: center; }
+  .cal-day-name { color: var(--muted); font-size: 10px; padding: 2px; }
+  .cal-day { padding: 4px 2px; border-radius: 4px; cursor: pointer; color: var(--muted); }
+  .cal-day:hover { background: var(--border); color: var(--text); }
+  .cal-day.today { background: var(--accent); color: #fff; font-weight: 700; }
+  .cal-day.other-month { opacity: .3; }
+  .cal-day.selected { background: var(--accent); color: #fff; }
+
+  .clear-btn {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 16px; border-radius: var(--radius); cursor: pointer; font-size: 12px;
+    font-weight: 600; letter-spacing: .5px; display: flex; align-items: center; gap: 6px;
+    align-self: flex-end; transition: background .2s;
+  }
+  .clear-btn:hover { background: var(--border); }
+
+  /* ── UPLOAD SECTION ── */
+  .upload-bar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .upload-label { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); }
+  .upload-btn {
+    background: var(--accent); color: #fff; border: none; border-radius: var(--radius);
+    padding: 7px 16px; font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity .2s;
+  }
+  .upload-btn:hover { opacity: .85; }
+  #file-input { display: none; }
+  .upload-status { font-size: 12px; color: var(--packed); }
+
+  /* ── KPI CARDS ── */
+  .kpis {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px;
+    background: var(--border); margin: 0; border-bottom: 1px solid var(--border);
+  }
+  .kpi {
+    background: var(--surface); text-align: center; padding: 18px 8px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .kpi-label { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; }
+  .kpi-val { font-size: 36px; font-weight: 800; line-height: 1; }
+  .kpi.inpool .kpi-label  { color: var(--inpool); }
+  .kpi.inpool .kpi-val    { color: var(--text); }
+  .kpi.waved  .kpi-label  { color: var(--waved); }
+  .kpi.waved  .kpi-val    { color: var(--waved); }
+  .kpi.picked .kpi-label  { color: var(--picked); }
+  .kpi.picked .kpi-val    { color: var(--picked); }
+  .kpi.packed .kpi-label  { color: var(--packed); }
+  .kpi.packed .kpi-val    { color: var(--packed); }
+  .kpi.staged .kpi-label  { color: var(--staged); }
+  .kpi.staged .kpi-val    { color: var(--staged); }
+  .kpi.shipped .kpi-label { color: var(--shipped); }
+  .kpi.shipped .kpi-val   { color: var(--shipped); }
+  .kpi.total  .kpi-label  { color: var(--muted); }
+  .kpi.total  .kpi-val    { color: var(--text); }
+
+  /* ── TABLE ── */
+  .table-wrap { padding: 0 0 24px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); }
+  thead th {
+    padding: 14px 12px; text-align: center; font-size: 10px; font-weight: 700;
+    letter-spacing: 1.2px; color: var(--muted); border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .15s; }
+  tbody tr:nth-child(odd)  { background: var(--surface); }
+  tbody tr:nth-child(even) { background: var(--surface2); }
+  tbody tr:hover { background: #1e2040; }
+  tbody td { padding: 12px; text-align: center; vertical-align: middle; }
+  td.order-num { font-weight: 700; color: var(--text); }
+  td.client-name { font-weight: 700; }
+
+  /* Row left-border accent by client */
+  tr[data-client="Client 1"] td:first-child { border-left: 3px solid #4488ff; }
+  tr[data-client="Client 2"] td:first-child { border-left: 3px solid #ff8844; }
+  tr[data-client="Client 3"] td:first-child { border-left: 3px solid #44ff88; }
+  tr[data-client="Client 4"] td:first-child { border-left: 3px solid #ffcc44; }
+  tr[data-client="Client 5"] td:first-child { border-left: 3px solid #cc44ff; }
+
+  .badge {
+    display: inline-block; padding: 4px 10px; border-radius: 4px;
+    font-size: 10px; font-weight: 700; letter-spacing: .8px; white-space: nowrap;
+  }
+  .badge-waved   { background: transparent; border: 1.5px solid var(--waved);  color: var(--waved);  }
+  .badge-picked  { background: transparent; border: 1.5px solid var(--picked); color: var(--picked); }
+  .badge-packed  { background: transparent; border: 1.5px solid var(--packed); color: var(--packed); }
+  .badge-staged  { background: transparent; border: 1.5px solid var(--staged); color: var(--staged); }
+  .badge-shipped { background: transparent; border: 1.5px solid var(--shipped);color: var(--shipped);}
+  .badge-inpool  { background: transparent; border: 1.5px solid var(--inpool); color: var(--inpool); }
+  .badge-waiting { background: transparent; border: 1.5px solid var(--picked); color: var(--picked); }
+
+  .mabd-urgent { color: var(--urgent); font-weight: 700; }
+  .days-urgent { color: var(--urgent); font-weight: 700; }
+
+  .empty-state {
+    text-align: center; padding: 60px 24px; color: var(--muted); font-size: 14px;
+  }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; }
+
+  @media (max-width: 900px) {
+    .kpis { grid-template-columns: repeat(4, 1fr); }
+    .filters-bar { flex-direction: column; align-items: stretch; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="brand">3PM COMPANY</span>
+    <span class="brand-sep">|</span>
+    <span class="dashboard-label">ORDER STATUS DASHBOARD</span>
+  </div>
+  <div class="refresh-info">
+    <span id="last-refresh">Last Refresh: —</span>
+    <span class="refresh-icon" title="Refresh" onclick="refreshData()">↻</span>
+  </div>
+</div>
+
+<!-- UPLOAD BAR -->
+<div class="upload-bar">
+  <span class="upload-label">DATA SOURCE</span>
+  <button class="upload-btn" onclick="document.getElementById('file-input').click()">📂 Upload Excel File</button>
+  <input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="handleFileUpload(event)" />
+  <span class="upload-status" id="upload-status">Upload an Excel file or use demo data below ↓</span>
+</div>
+
+<!-- FILTERS -->
+<div class="filters-bar">
+  <div class="cal-wrapper">
+    <label>DATE</label>
+    <div class="cal-widget">
+      <div class="cal-header">
+        <button class="cal-nav" onclick="prevMonth()">‹</button>
+        <span class="cal-month" id="cal-month-label"></span>
+        <button class="cal-nav" onclick="nextMonth()">›</button>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+  </div>
+
+  <div class="filter-group">
+    <label>CLIENT</label>
+    <select id="filter-client" onchange="applyFilters()">
+      <option value="All">All</option>
+    </select>
+  </div>
+
+  <div class="filter-group">
+    <label>STATUS</label>
+    <select id="filter-status" onchange="applyFilters()">
+      <option value="All">All</option>
+      <option>WAVED</option>
+      <option>PICKED</option>
+      <option>PACKED</option>
+      <option>STAGED</option>
+      <option>SHIPPED</option>
+      <option>JUST CAME / IN POOL</option>
+      <option>IN POOL / WAITING FOR PICK</option>
+    </select>
+  </div>
+
+  <div class="filter-group">
+    <label>ORDER TYPE</label>
+    <select id="filter-type" onchange="applyFilters()">
+      <option value="All">All</option>
+      <option>Units</option>
+      <option>Pallets</option>
+    </select>
+  </div>
+
+  <button class="clear-btn" onclick="clearFilters()">✕ CLEAR FILTERS</button>
+</div>
+
+<!-- KPIs -->
+<div class="kpis">
+  <div class="kpi inpool">  <span class="kpi-label">JUST CAME / IN POOL</span><span class="kpi-val" id="kpi-inpool">0</span></div>
+  <div class="kpi waved">   <span class="kpi-label">WAVED</span>               <span class="kpi-val" id="kpi-waved">0</span></div>
+  <div class="kpi picked">  <span class="kpi-label">PICKED</span>              <span class="kpi-val" id="kpi-picked">0</span></div>
+  <div class="kpi packed">  <span class="kpi-label">PACKED</span>              <span class="kpi-val" id="kpi-packed">0</span></div>
+  <div class="kpi staged">  <span class="kpi-label">STAGED</span>              <span class="kpi-val" id="kpi-staged">0</span></div>
+  <div class="kpi shipped"> <span class="kpi-label">SHIPPED</span>             <span class="kpi-val" id="kpi-shipped">0</span></div>
+  <div class="kpi total">   <span class="kpi-label">TOTAL ORDERS</span>        <span class="kpi-val" id="kpi-total">0</span></div>
+</div>
+
+<!-- TABLE -->
+<div class="table-wrap">
+  <table id="orders-table">
+    <thead>
+      <tr>
+        <th>ORDER #</th><th>CLIENT</th><th>ORDER TYPE</th>
+        <th>UNITS</th><th>PALLETS</th><th>STATUS</th>
+        <th>STATUS LOCATION / DETAIL</th>
+        <th>MABD DATE ⓘ</th><th>DAYS TO MABD</th><th>ORDER DATE</th>
+      </tr>
+    </thead>
+    <tbody id="table-body"></tbody>
+  </table>
+  <div class="empty-state" id="empty-state" style="display:none">
+    <div class="empty-icon">📦</div>
+    <div>No orders match the current filters.</div>
+  </div>
+</div>
+
+<script>
+// ── DEMO DATA ─────────────────────────────────────────────────────────────────
+const DEMO_ROWS = [
+  { order:"C1-1001", client:"Client 1", type:"Units",   units:5200, pallets:"–", status:"WAVED",                 detail:"Waved Today",                   mabd:"5/21/2024", daysToMabd:1, orderDate:"5/20/2024 09:15 AM" },
+  { order:"C2-1001", client:"Client 2", type:"Units",   units:3800, pallets:"–", status:"PICKED",                detail:"Picked – In Progress",           mabd:"5/21/2024", daysToMabd:1, orderDate:"5/20/2024 08:40 AM" },
+  { order:"C2-1002", client:"Client 2", type:"Units",   units:2100, pallets:"–", status:"JUST CAME / IN POOL",   detail:"In Pool – Waiting for Waving",   mabd:"5/22/2024", daysToMabd:2, orderDate:"5/20/2024 10:05 AM" },
+  { order:"C3-1001", client:"Client 3", type:"Pallets", units:"–",  pallets:40,  status:"IN POOL / WAITING FOR PICK", detail:"Waiting for Pick",          mabd:"5/21/2024", daysToMabd:1, orderDate:"5/20/2024 07:50 AM" },
+  { order:"C4-1001", client:"Client 4", type:"Units",   units:4500, pallets:"–", status:"WAVED",                 detail:"Waved Today",                   mabd:"5/22/2024", daysToMabd:2, orderDate:"5/20/2024 08:10 AM" },
+  { order:"C4-1002", client:"Client 4", type:"Units",   units:6200, pallets:"–", status:"PICKED",                detail:"Picked – In Progress",           mabd:"5/21/2024", daysToMabd:1, orderDate:"5/20/2024 08:25 AM" },
+  { order:"C4-1003", client:"Client 4", type:"Units",   units:7100, pallets:"–", status:"PACKED",                detail:"Packed – Ready to Stage",        mabd:"5/21/2024", daysToMabd:1, orderDate:"5/20/2024 09:05 AM" },
+  { order:"C4-1004", client:"Client 4", type:"Units",   units:7100, pallets:"–", status:"STAGED",                detail:"Staged in Front of Dock Door 5", mabd:"5/21/2024", daysToMabd:1, orderDate:"5/20/2024 10:00 AM" },
+  { order:"C5-1001", client:"Client 5", type:"Pallets", units:"–",  pallets:22,  status:"SHIPPED",               detail:"Shipped – Today",                mabd:"5/20/2024", daysToMabd:0, orderDate:"5/19/2024 11:20 AM" },
+];
+
+let allRows = [...DEMO_ROWS];
+let selectedDate = null;
+
+// ── CALENDAR ──────────────────────────────────────────────────────────────────
+let calYear = 2024, calMonth = 4; // May 2024 (0-indexed)
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+function renderCalendar() {
+  document.getElementById("cal-month-label").textContent = MONTH_NAMES[calMonth] + " " + calYear;
+  const grid = document.getElementById("cal-grid");
+  grid.innerHTML = "";
+  DAY_NAMES.forEach(d => { const el = document.createElement("div"); el.className="cal-day-name"; el.textContent=d; grid.appendChild(el); });
+  const first = new Date(calYear, calMonth, 1).getDay();
+  const days  = new Date(calYear, calMonth+1, 0).getDate();
+  const prev  = new Date(calYear, calMonth, 0).getDate();
+  for (let i = first-1; i >= 0; i--) {
+    const el = document.createElement("div");
+    el.className = "cal-day other-month"; el.textContent = prev - i; grid.appendChild(el);
+  }
+  for (let d = 1; d <= days; d++) {
+    const el = document.createElement("div"); el.textContent = d;
+    const dateStr = `${calMonth+1}/${d}/${calYear}`;
+    el.className = "cal-day" + (selectedDate === dateStr ? " selected" : "");
+    el.onclick = () => { selectedDate = (selectedDate === dateStr ? null : dateStr); renderCalendar(); applyFilters(); };
+    grid.appendChild(el);
+  }
+  const rem = 42 - first - days;
+  for (let d = 1; d <= rem; d++) {
+    const el = document.createElement("div"); el.className="cal-day other-month"; el.textContent=d; grid.appendChild(el);
+  }
+}
+function prevMonth() { calMonth--; if (calMonth < 0) { calMonth=11; calYear--; } renderCalendar(); }
+function nextMonth() { calMonth++; if (calMonth > 11) { calMonth=0; calYear++; } renderCalendar(); }
+
+// ── STATUS BADGE ──────────────────────────────────────────────────────────────
+function statusBadge(s) {
+  const map = {
+    "WAVED":"waved","PICKED":"picked","PACKED":"packed","STAGED":"staged",
+    "SHIPPED":"shipped","JUST CAME / IN POOL":"inpool","IN POOL / WAITING FOR PICK":"waiting"
+  };
+  return `<span class="badge badge-${map[s]||'inpool'}">${s}</span>`;
+}
+
+// ── POPULATE CLIENT FILTER ────────────────────────────────────────────────────
+function populateFilters() {
+  const sel = document.getElementById("filter-client");
+  const clients = [...new Set(allRows.map(r => r.client))].sort();
+  sel.innerHTML = '<option value="All">All</option>';
+  clients.forEach(c => { const o=document.createElement("option"); o.value=o.textContent=c; sel.appendChild(o); });
+}
+
+// ── APPLY FILTERS + RENDER ────────────────────────────────────────────────────
+function applyFilters() {
+  const cl = document.getElementById("filter-client").value;
+  const st = document.getElementById("filter-status").value;
+  const tp = document.getElementById("filter-type").value;
+
+  let rows = allRows.filter(r => {
+    if (cl !== "All" && r.client !== cl) return false;
+    if (st !== "All" && r.status !== st) return false;
+    if (tp !== "All" && r.type !== tp) return false;
+    if (selectedDate) {
+      const d = new Date(r.orderDate); 
+      const ds = `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+      if (ds !== selectedDate) return false;
+    }
+    return true;
+  });
+
+  // KPIs
+  const count = s => rows.filter(r => r.status === s).length;
+  const inpool = rows.filter(r => r.status.includes("IN POOL")).length;
+  document.getElementById("kpi-inpool").textContent  = inpool;
+  document.getElementById("kpi-waved").textContent   = count("WAVED");
+  document.getElementById("kpi-picked").textContent  = count("PICKED");
+  document.getElementById("kpi-packed").textContent  = count("PACKED");
+  document.getElementById("kpi-staged").textContent  = count("STAGED");
+  document.getElementById("kpi-shipped").textContent = count("SHIPPED");
+  document.getElementById("kpi-total").textContent   = rows.length;
+
+  // Table
+  const tbody = document.getElementById("table-body");
+  tbody.innerHTML = "";
+  const empty = document.getElementById("empty-state");
+  if (rows.length === 0) { empty.style.display="block"; return; }
+  empty.style.display = "none";
+
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.dataset.client = r.client;
+    const urgent = r.daysToMabd <= 1;
+    tr.innerHTML = `
+      <td class="order-num">${r.order}</td>
+      <td class="client-name">${r.client}</td>
+      <td>${r.type}</td>
+      <td>${r.units}</td>
+      <td>${r.pallets}</td>
+      <td>${statusBadge(r.status)}</td>
+      <td style="text-align:left">${r.detail}</td>
+      <td class="${urgent?'mabd-urgent':''}">${r.mabd}</td>
+      <td class="${urgent?'days-urgent':''}">${r.daysToMabd}</td>
+      <td>${r.orderDate}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function clearFilters() {
+  document.getElementById("filter-client").value = "All";
+  document.getElementById("filter-status").value = "All";
+  document.getElementById("filter-type").value = "All";
+  selectedDate = null;
+  renderCalendar();
+  applyFilters();
+}
+
+// ── FILE UPLOAD (Excel / CSV) ─────────────────────────────────────────────────
+function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: "binary" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws, { defval: "" });
+      allRows = json.map(r => ({
+        order:      r["ORDER #"]     || r["order"]      || "",
+        client:     r["CLIENT"]      || r["client"]     || "",
+        type:       r["ORDER TYPE"]  || r["type"]       || "",
+        units:      r["UNITS"]       || r["units"]      || "–",
+        pallets:    r["PALLETS"]     || r["pallets"]    || "–",
+        status:     (r["STATUS"]     || r["status"]     || "").toUpperCase(),
+        detail:     r["STATUS LOCATION / DETAIL"] || r["detail"] || "",
+        mabd:       r["MABD DATE"]   || r["mabd"]       || "",
+        daysToMabd: parseInt(r["DAYS TO MABD"] ?? r["daysToMabd"] ?? 0),
+        orderDate:  r["ORDER DATE"]  || r["orderDate"]  || "",
+      }));
+      document.getElementById("upload-status").textContent = `✓ Loaded ${allRows.length} orders from "${file.name}"`;
+      document.getElementById("upload-status").style.color = "var(--packed)";
+      updateRefresh();
+      populateFilters();
+      applyFilters();
+    } catch(err) {
+      document.getElementById("upload-status").textContent = "⚠ Failed to parse file. Check column headers.";
+      document.getElementById("upload-status").style.color = "var(--urgent)";
+    }
+  };
+  reader.readAsBinaryString(file);
+}
+
+function updateRefresh() {
+  const now = new Date();
+  document.getElementById("last-refresh").textContent =
+    "Last Refresh: " + now.toLocaleDateString("en-US") + " " +
+    now.toLocaleTimeString("en-US", {hour:"2-digit", minute:"2-digit"});
+}
+
+function refreshData() {
+  updateRefresh();
+  applyFilters();
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+renderCalendar();
+populateFilters();
+applyFilters();
+document.getElementById("last-refresh").textContent = "Last Refresh: 5/20/2024 10:15 AM";
+</script>
+</body>
+</html>

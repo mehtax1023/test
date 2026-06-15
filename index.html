@@ -95,14 +95,23 @@ tbody tr{border-bottom:0.5px solid var(--border);transition:background .12s}
 tbody tr:hover{background:var(--surface2)}
 tbody td{padding:10px;text-align:center;vertical-align:middle}
 td.left{text-align:left;padding-left:14px}
-.badge{display:inline-block;padding:3px 9px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.5px;white-space:nowrap;border:0.5px solid}
-.b-waved{border-color:var(--blue);color:var(--blue);background:transparent}
-.b-picked{border-color:var(--amber);color:var(--amber);background:transparent}
-.b-packed{border-color:var(--green);color:var(--green);background:transparent}
-.b-staged{border-color:var(--purple);color:var(--purple);background:transparent}
-.b-shipped{border-color:var(--teal);color:var(--teal);background:transparent}
-.b-inpool{border-color:var(--border2);color:var(--muted);background:transparent}
-.urgent{color:var(--red);font-weight:700}
+.badge{display:inline-block;padding:4px 10px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.5px;white-space:nowrap}
+.b-waved{background:#E6F1FB;color:#185FA5}
+.b-picked{background:#FAEEDA;color:#633806}
+.b-packed{background:#EAF3DE;color:#27500A}
+.b-staged{background:#EEEDFE;color:#3C3489}
+.b-shipped{background:#E1F5EE;color:#085041}
+.b-inpool{background:#f1f0ee;color:#5F5E5A}
+@media (prefers-color-scheme:dark){
+  .b-waved{background:#0C447C;color:#85B7EB}
+  .b-picked{background:#412402;color:#FAC775}
+  .b-packed{background:#173404;color:#C0DD97}
+  .b-staged{background:#26215C;color:#AFA9EC}
+  .b-shipped{background:#04342C;color:#5DCAA5}
+  .b-inpool{background:#2C2C2A;color:#B4B2A9}
+}
+.days-pill{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#E24B4A;color:#fff;font-size:12px;font-weight:700}
+.urgent-date{color:var(--red);font-weight:700}
 .empty{text-align:center;padding:48px;color:var(--muted);font-size:13px}
 .empty i{font-size:36px;display:block;margin-bottom:8px}
 
@@ -291,6 +300,13 @@ function prevM() { calM--; if (calM < 0) { calM=11; calY--; } renderCal(); }
 function nextM() { calM++; if (calM > 11) { calM=0; calY++; } renderCal(); }
 function clearDate() { selDate = null; renderCal(); render(); }
 
+function formatDate(val) {
+  if (!val) return "–";
+  const d = new Date(val);
+  if (isNaN(d)) return val;
+  return d.toLocaleDateString("en-US", {month:"short", day:"numeric", year:"numeric"});
+}
+
 function badge(s) {
   const map = {"WAVED":"b-waved","PICKED":"b-picked","PACKED":"b-packed","STAGED":"b-staged","SHIPPED":"b-shipped"};
   const key = Object.keys(map).find(k => s.includes(k)) || "";
@@ -319,6 +335,10 @@ function render() {
   empty.style.display = "none";
   rows.forEach(r => {
     const u = (r.daysToMabd <= 1 && r.daysToMabd >= 0);
+    const mabdFormatted = formatDate(r.mabd);
+    const daysPill = (r.daysToMabd === 1 || r.daysToMabd === 0)
+      ? `<span class="days-pill">${r.daysToMabd}</span>`
+      : `<span>${r.daysToMabd}</span>`;
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td style="font-weight:600">${r.order}</td>
@@ -328,8 +348,8 @@ function render() {
       <td>${r.pallets}</td>
       <td>${badge(r.status)}</td>
       <td class="left">${r.detail}</td>
-      <td class="${u?'urgent':''}">${r.mabd}</td>
-      <td class="${u?'urgent':''}">${r.daysToMabd}</td>
+      <td class="${u?'urgent-date':''}">${mabdFormatted}</td>
+      <td>${daysPill}</td>
       <td style="color:var(--muted)">${r.orderDate}</td>
     `;
     tbody.appendChild(tr);
